@@ -41,19 +41,26 @@
             "rateLimit": 200
         },
         "pair_whitelist": [
-            "BTC/USDT",
-            "ETH/USDT",
-            "DOGE/USDT",
-            "ADA/USDT",
-            "LINK/USDT",
-            "XLM/USDT",
-            "LTC/USDT",
-            "BCH/USDT",
-            "VET/USDT",
-            "DOT/USDT",
-            "TRX/USDT",
-            "NEO/USDT",
-            "XRP/USDT"
+            "DOGE/USDT", 
+            "BTC/USDT", 
+            "ETH/USDT", 
+            "XRP/USDT", 
+            "VET/USDT", 
+            "CHZ/USDT", 
+            "ADA/USDT", 
+            "CAKE/USDT", 
+            "LTC/USDT", 
+            "DOT/USDT", 
+            "BCH/USDT", 
+            "LINK/USDT", 
+            "TRX/USDT", 
+            "EOS/USDT", 
+            "NEO/USDT", 
+            "BTT/USDT", 
+            "UNI/USDT", 
+            "WIN/USDT", 
+            "SXP/USDT", 
+            "SOL/USDT"
         ],
         "pair_blacklist": [
             "BNB/BTC",
@@ -68,6 +75,8 @@
             "BNB/USDC",
             "BNB/USDS",
             "BNB/USDT",
+            "EUR/USDT",
+            "BUSD/USDT"
         ]
     },
     "pairlists": [
