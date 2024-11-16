@@ -1,151 +1,175 @@
+
 import numpy as np
 import pandas as pd
 from pandas import DataFrame
-from functools import reduce
 from freqtrade.strategy import IStrategy, IntParameter, DecimalParameter, CategoricalParameter
 import talib.abstract as ta
 import freqtrade.vendor.qtpylib.indicators as qtpylib
+from datetime import datetime
+import logging
+logger = logging.getLogger(__name__)
 
 class GaussianChannelStrategy(IStrategy):
     INTERFACE_VERSION = 3
 
-    # Strategy parameters
-    minimal_roi = {
-        "0": 0.1
-    }
+    # Force override config values
+    MINIMAL_ROI = {'0': float('inf')}
+    STOPLOSS = -0.05
+    USE_CUSTOM_STOPLOSS = False
+    USE_EXIT_SIGNAL = True
+    PROCESS_ONLY_NEW_CANDLES = True
 
-    stoploss = -0.10
-    trailing_stop = False
+    # Strategy settings
     timeframe = '1d'
-    process_only_new_candles = True
-    use_exit_signal = True
-    exit_profit_only = False
-    ignore_roi_if_entry_signal = False
-
-    # Hyperopt parameters
-    rsi_period = IntParameter(10, 20, default=14, space="buy")
-    rsi_threshold = IntParameter(45, 65, default=50, space="buy")
-    uptrend_strength = IntParameter(1, 5, default=1, space="buy")
-    confirmation_bars = IntParameter(1, 3, default=1, space="buy")
-    poles = IntParameter(2, 9, default=4, space="buy")
-    sampling_period = IntParameter(100, 200, default=144, space="buy")
+    startup_candle_count = 20
+    position_adjustment_enable = False
+    
+    # Plot config with TradingView colors
+    plot_config = {
+        'main_plot': {
+            'src': {},
+            'filt': {'color': '#0000ff', 'width': 2},
+            'hband': {'color': '#00ff00'},
+            'lband': {'color': '#ff0000'},
+            'fill_area': {
+                'fill_color': lambda df: df['isUptrendZone'].map({True: '#00ff0020', False: '#ff000020'})
+            }
+        },
+        'subplots': {
+            "RSI": {
+                'rsi': {'color': 'blue'},
+            }
+        }
+    }
+    
+    # Strategy Parameters (matched to TradingView)
+    rsi_period = IntParameter(10, 30, default=14, space="buy")
+    rsi_threshold = IntParameter(15, 65, default=15, space="buy")
+    poles = IntParameter(1, 9, default=5, space="buy")
+    sampling_period = IntParameter(2, 200, default=144, space="buy")
     tr_multiplier = DecimalParameter(1.0, 2.0, default=1.414, decimals=3, space="buy")
     use_reduced_lag = CategoricalParameter([True, False], default=False, space="buy")
     use_fast_response = CategoricalParameter([True, False], default=False, space="buy")
 
-    def gaussian_filter(self, source: pd.Series, n_poles: int, period: int) -> pd.Series:
-        # Calculate beta and alpha components
-        pi = np.pi
-        beta = (1 - np.cos(4 * np.arcsin(1) / period)) / (pow(1.414, 2/n_poles) - 1)
-        alpha = -beta + np.sqrt(pow(beta, 2) + 2 * beta)
+    def debug_msg(self, msg: str, *args, **kwargs) -> None:
+        logger.info(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] {msg}")
+
+    def gaussian_filter_9x(self, _a: float, _s: np.array, _i: int) -> np.array:
+        _x = 1 - _a
+        result = np.zeros_like(_s, dtype=float)
         
-        # Initialize the filtered series
-        filtered = source.copy()
+        # Initialize first values using source
+        for t in range(min(9, len(_s))):
+            result[t] = _s[t]
         
-        # Apply the filter n_poles times
-        for _ in range(n_poles):
-            filtered = filtered.ewm(alpha=alpha).mean()
+        # Calculate remaining values
+        for t in range(9, len(_s)):
+            _f = (pow(_a, _i) * _s[t] + 
+                 _i * _x * result[t-1])
+            
+            if _i >= 2:
+                _f -= (_i * (_i - 1) / 2) * pow(_x, 2) * result[t-2]
+            if _i >= 3:
+                _f += (_i * (_i - 1) * (_i - 2) / 6) * pow(_x, 3) * result[t-3]
+            if _i >= 4:
+                _f -= (_i * (_i - 1) * (_i - 2) * (_i - 3) / 24) * pow(_x, 4) * result[t-4]
+            if _i >= 5:
+                _f += (_i * (_i - 1) * (_i - 2) * (_i - 3) * (_i - 4) / 120) * pow(_x, 5) * result[t-5]
+            
+            result[t] = _f
         
-        return filtered
+        return result
 
     def populate_indicators(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
-        # RSI
-        dataframe['rsi'] = ta.RSI(dataframe['close'], timeperiod=self.rsi_period.value)
-        
-        # Source data (hlc3)
+        # Source calculation
         dataframe['src'] = (dataframe['high'] + dataframe['low'] + dataframe['close']) / 3
         
-        # True Range
+        # RSI Calculation
+        dataframe['rsi'] = ta.RSI(dataframe['src'], timeperiod=self.rsi_period.value)
+        
+        # Beta and Alpha Components
+        beta = (1 - np.cos(4 * np.arcsin(1) / self.sampling_period.value)) / (pow(1.414, 2/self.poles.value) - 1)
+        alpha = -beta + np.sqrt(pow(beta, 2) + 2 * beta)
+
+        # Lag calculation
+        lag = int((self.sampling_period.value - 1)/(2 * self.poles.value))
+
+        # Calculate True Range
         dataframe['tr'] = ta.TRANGE(dataframe['high'], dataframe['low'], dataframe['close'])
-        
-        # Calculate lag for reduced lag mode
-        lag = (self.sampling_period.value - 1) / (2 * self.poles.value)
-        lag = int(lag)
-        
-        # Prepare source data with lag reduction if enabled
+
+        # Data preparation
         if self.use_reduced_lag.value:
-            dataframe['srcdata'] = dataframe['src'] + (dataframe['src'] - dataframe['src'].shift(lag))
-            dataframe['trdata'] = dataframe['tr'] + (dataframe['tr'] - dataframe['tr'].shift(lag))
+            srcdata = dataframe['src'] + (dataframe['src'] - dataframe['src'].shift(lag))
+            trdata = dataframe['tr'] + (dataframe['tr'] - dataframe['tr'].shift(lag))
         else:
-            dataframe['srcdata'] = dataframe['src']
-            dataframe['trdata'] = dataframe['tr']
-        
+            srcdata = dataframe['src']
+            trdata = dataframe['tr']
+
         # Apply Gaussian filter
-        dataframe['filtn'] = self.gaussian_filter(
-            dataframe['srcdata'], 
-            self.poles.value, 
-            self.sampling_period.value
-        )
-        
-        dataframe['filt1'] = self.gaussian_filter(
-            dataframe['srcdata'], 
-            1, 
-            self.sampling_period.value
-        )
-        
-        dataframe['filtntr'] = self.gaussian_filter(
-            dataframe['trdata'], 
-            self.poles.value, 
-            self.sampling_period.value
-        )
-        
-        dataframe['filt1tr'] = self.gaussian_filter(
-            dataframe['trdata'], 
-            1, 
-            self.sampling_period.value
-        )
-        
-        # Apply fast response mode if enabled
+        filtn = self.gaussian_filter_9x(alpha, srcdata.to_numpy(), self.poles.value)
+        filt1 = self.gaussian_filter_9x(alpha, srcdata.to_numpy(), 1)
+        filtntr = self.gaussian_filter_9x(alpha, trdata.to_numpy(), self.poles.value)
+        filt1tr = self.gaussian_filter_9x(alpha, trdata.to_numpy(), 1)
+
+        # Apply lag reduction if enabled
         if self.use_fast_response.value:
-            dataframe['filt'] = (dataframe['filtn'] + dataframe['filt1']) / 2
-            dataframe['filttr'] = (dataframe['filtntr'] + dataframe['filt1tr']) / 2
+            dataframe['filt'] = (filtn + filt1) / 2
+            dataframe['filttr'] = (filtntr + filt1tr) / 2
         else:
-            dataframe['filt'] = dataframe['filtn']
-            dataframe['filttr'] = dataframe['filtntr']
-        
+            dataframe['filt'] = filtn
+            dataframe['filttr'] = filtntr
+
         # Calculate bands
         dataframe['hband'] = dataframe['filt'] + dataframe['filttr'] * self.tr_multiplier.value
         dataframe['lband'] = dataframe['filt'] - dataframe['filttr'] * self.tr_multiplier.value
+
+        # Trend direction (matches TradingView coloring)
+        dataframe['isUptrendZone'] = dataframe['filt'] > dataframe['filt'].shift(1)
         
-        # Trend direction
-        dataframe['uptrend'] = dataframe['filt'] > dataframe['filt'].shift(1)
-        
-        # Uptrend strength check
-        dataframe['strong_uptrend'] = True
-        for i in range(self.uptrend_strength.value):
-            dataframe['strong_uptrend'] &= dataframe['filt'].shift(i) > dataframe['filt'].shift(i+1)
-        
-        # Price above band check
-        dataframe['price_above_band'] = True
-        for i in range(self.confirmation_bars.value):
-            dataframe['price_above_band'] &= dataframe['close'].shift(i) > dataframe['hband'].shift(i)
-        
+        # Debug key values
+        if len(dataframe) > 0:
+            self.debug_msg(f"Last values for {metadata['pair']}:")
+            self.debug_msg(f"src: {dataframe['src'].iloc[-1]:.2f}")
+            self.debug_msg(f"filt: {dataframe['filt'].iloc[-1]:.2f}")
+            self.debug_msg(f"hband: {dataframe['hband'].iloc[-1]:.2f}")
+            self.debug_msg(f"rsi: {dataframe['rsi'].iloc[-1]:.2f}")
+            self.debug_msg(f"isUptrendZone: {dataframe['isUptrendZone'].iloc[-1]}")
+
         return dataframe
 
     def populate_entry_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
-        conditions = []
+        entry_conditions = (
+            qtpylib.crossed_above(dataframe['src'], dataframe['hband']) &
+            dataframe['isUptrendZone'] &
+            (dataframe['rsi'] > self.rsi_threshold.value)
+        )
         
-        conditions.append(dataframe['price_above_band'])
-        conditions.append(dataframe['rsi'] > self.rsi_threshold.value)
-        conditions.append(dataframe['strong_uptrend'])
+        dataframe.loc[entry_conditions, 'enter_long'] = 1
         
-        if conditions:
-            dataframe.loc[
-                reduce(lambda x, y: x & y, conditions),
-                'enter_long'
-            ] = 1
-        
+        # Debug entries with fixed datetime handling
+        if entry_conditions.any():
+            entry_dates = dataframe.index[entry_conditions]
+            self.debug_msg(f"Entry signals for {metadata['pair']}: {[d.strftime('%Y-%m-%d') if hasattr(d, 'strftime') else str(d) for d in entry_dates]}")
+            for date in entry_dates:
+                idx = dataframe.index.get_loc(date)
+                self.debug_msg(f"Entry at {date}:")
+                self.debug_msg(f"Price: {dataframe['src'].iloc[idx]:.2f}")
+                self.debug_msg(f"Upper Band: {dataframe['hband'].iloc[idx]:.2f}")
+                self.debug_msg(f"RSI: {dataframe['rsi'].iloc[idx]:.2f}")
+
         return dataframe
 
     def populate_exit_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
-        conditions = []
+        exit_conditions = (
+            qtpylib.crossed_below(dataframe['src'], dataframe['hband']) |
+            ~dataframe['isUptrendZone'] # & (dataframe['src'] < dataframe['filt']))
+        )
         
-        conditions.append(qtpylib.crossed_below(dataframe['close'], dataframe['hband']))
+        dataframe.loc[exit_conditions, 'exit_long'] = 1
         
-        if conditions:
-            dataframe.loc[
-                reduce(lambda x, y: x & y, conditions),
-                'exit_long'
-            ] = 1
-        
+        # Debug exits with fixed datetime handling
+        if exit_conditions.any():
+            exit_dates = dataframe.index[exit_conditions]
+            self.debug_msg(f"Exit signals for {metadata['pair']}: {[d.strftime('%Y-%m-%d') if hasattr(d, 'strftime') else str(d) for d in exit_dates]}")
+
         return dataframe
