@@ -1,89 +1,98 @@
 {
-    "max_open_trades": 5,
-    "stake_currency": "USDT",
-    "stake_amount": "unlimited",
+    "$schema": "https://schema.freqtrade.io/schema.json",
+    "max_open_trades": 3,
+    "stake_currency": "EUR",
+    "stake_amount": 0.5,
     "tradable_balance_ratio": 0.99,
     "fiat_display_currency": "USD",
-    "timeframe": "15m",
+    "amount_reserve_percent": 0.05,
+    "available_capital": 1000,
+    "amend_last_stake_amount": false,
+    "last_stake_amount_min_ratio": 0.5,
     "dry_run": true,
     "dry_run_wallet": 1000,
     "cancel_open_orders_on_exit": false,
-    "unfilledtimeout": {
-        "buy": 10,
-        "sell": 30
+    "timeframe": "5m",
+    "trailing_stop": false,
+    "trailing_stop_positive": 0.005,
+    "trailing_stop_positive_offset": 0.0051,
+    "trailing_only_offset_is_reached": false,
+    "use_exit_signal": true,
+    "exit_profit_only": false,
+    "exit_profit_offset": 0.0,
+    "ignore_roi_if_entry_signal": false,
+    "ignore_buying_expired_candle_after": 300,
+    "trading_mode": "spot",
+    "margin_mode": "",
+    "minimal_roi": {
+        "40":  0.0,
+        "30":  0.01,
+        "20":  0.02,
+        "0":  0.04
     },
-    "bid_strategy": {
-        "price_side": "bid",
-        "ask_last_balance": 0.0,
-        "use_order_book": false,
+    "stoploss": -0.10,
+    "unfilledtimeout": {
+        "entry": 10,
+        "exit": 10,
+        "exit_timeout_count": 0,
+        "unit": "minutes"
+    },
+    "entry_pricing": {
+        "price_side": "same",
+        "use_order_book": true,
         "order_book_top": 1,
+        "price_last_balance": 0.0,
         "check_depth_of_market": {
             "enabled": false,
             "bids_to_ask_delta": 1
         }
     },
-    "ask_strategy": {
-        "price_side": "ask",
-        "use_order_book": false,
-        "order_book_min": 1,
-        "order_book_max": 1,
-        "use_sell_signal": true,
-        "sell_profit_only": false,
-        "ignore_roi_if_buy_signal": false
+    "exit_pricing":{
+        "price_side": "same",
+        "use_order_book": true,
+        "order_book_top": 1,
+        "price_last_balance": 0.0
     },
-    "exchange": {
-        "name": "binance",
-        "key": "",
-        "secret": "",
-        "ccxt_config": {"enableRateLimit": true},
-        "ccxt_async_config": {
-            "enableRateLimit": true,
-            "rateLimit": 200
-        },
-        "pair_whitelist": [
-            "DOGE/USDT", 
-            "BTC/USDT", 
-            "ETH/USDT", 
-            "XRP/USDT", 
-            "VET/USDT", 
-            "CHZ/USDT", 
-            "ADA/USDT", 
-            "CAKE/USDT", 
-            "LTC/USDT", 
-            "DOT/USDT", 
-            "BCH/USDT", 
-            "LINK/USDT", 
-            "TRX/USDT", 
-            "EOS/USDT", 
-            "NEO/USDT", 
-            "BTT/USDT", 
-            "UNI/USDT", 
-            "WIN/USDT", 
-            "SXP/USDT", 
-            "SOL/USDT"
-        ],
-        "pair_blacklist": [
-            "BNB/BTC",
-            "BNB/BUSD",
-            "BNB/ETH",
-            "BNB/EUR",
-            "BNB/NGN",
-            "BNB/PAX",
-            "BNB/RUB",
-            "BNB/TRY",
-            "BNB/TUSD",
-            "BNB/USDC",
-            "BNB/USDS",
-            "BNB/USDT",
-            "EUR/USDT",
-            "BUSD/USDT"
-        ]
+    "order_types": {
+        "entry": "limit",
+        "exit": "limit",
+        "emergency_exit": "market",
+        "force_exit": "market",
+        "force_entry": "market",
+        "stoploss": "market",
+        "stoploss_on_exchange": false,
+        "stoploss_price_type": "last",
+        "stoploss_on_exchange_interval": 60,
+        "stoploss_on_exchange_limit_ratio": 0.99
+    },
+    "order_time_in_force": {
+        "entry": "GTC",
+        "exit": "GTC"
     },
     "pairlists": [
-        {
-            "method": "StaticPairList"
-        }
+        {"method": "StaticPairList"},
+        {"method": "FullTradesFilter"},
+        {"method": "PrecisionFilter"},
+        {"method": "PriceFilter", "low_price_ratio": 0.01, "min_price": 0.00000010}
     ],
+    "exchange": {
+        "name": "bitvavo",
+        "key": "",
+        "secret": "",
+        "password": "",
+        "log_responses": false,
+        "ccxt_config": {},
+        "ccxt_async_config": {},
+        "pair_whitelist": [
+            "BTC/EUR",
+            "ETH/EUR"
+        ],
+        "pair_blacklist": [
+            "DOGE/BTC"
+        ],
+        "outdated_offset": 5,
+        "markets_refresh_interval": 60
+    },
     "edge": {
         "enabled": false,
         "process_throttle_secs": 3600,
@@ -101,7 +110,32 @@
     "telegram": {
         "enabled": true,
         "token": "1739518743:AAGvvtdVGlfuG3NVYHbaniJwnK-vbuOclfk",
-        "chat_id": "-453763499"
+        "chat_id": "-453763499",
+        "notification_settings": {
+            "status": "on",
+            "warning": "on",
+            "startup": "on",
+            "entry": "on",
+            "entry_fill": "on",
+            "exit": {
+                "roi": "off",
+                "emergency_exit": "off",
+                "force_exit": "off",
+                "exit_signal": "off",
+                "trailing_stop_loss": "off",
+                "stop_loss": "off",
+                "stoploss_on_exchange": "off",
+                "custom_exit": "off"
+            },
+            "exit_fill": "on",
+            "entry_cancel": "on",
+            "exit_cancel": "on",
+            "protection_trigger": "off",
+            "protection_trigger_global": "on",
+            "show_candle": "off"
+        },
+        "reload": true,
+        "balance_dust_level": 0.01
     },
     "api_server": {
         "enabled": false,
@@ -111,13 +145,40 @@
         "enable_openapi": false,
         "jwt_secret_key": "somethingrandom",
         "CORS_origins": [],
-        "username": "",
-        "password": ""
+        "username": "freqtrader",
+        "password": "SuperSecurePassword",
+        "ws_token": "secret_ws_t0ken."
+    },
+    "external_message_consumer": {
+        "enabled": false,
+        "producers": [
+          {
+            "name": "default",
+            "host": "127.0.0.2",
+            "port": 8080,
+            "ws_token": "secret_ws_t0ken."
+          }
+        ],
+        "wait_timeout": 300,
+        "ping_timeout": 10,
+        "sleep_time": 10,
+        "remove_entry_exit_signals": false,
+        "message_size_limit": 8
     },
     "bot_name": "freqtrade",
+    "db_url": "sqlite:///tradesv3.sqlite",
     "initial_state": "running",
-    "forcebuy_enable": false,
+    "force_entry_enable": false,
     "internals": {
-        "process_throttle_secs": 5
-    }
+        "process_throttle_secs": 5,
+        "heartbeat_interval": 60
+    },
+    "disable_dataframe_checks": false,
+    "strategy": "SampleStrategy",
+    "strategy_path": "user_data/strategies/",
+    "recursive_strategy_search": false,
+    "add_config_files": [],
+    "reduce_df_footprint": false,
+    "dataformat_ohlcv": "feather",
+    "dataformat_trades": "feather"
 }
