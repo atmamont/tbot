@@ -1,15 +1,15 @@
----
-version: '3'
 services:
   freqtrade:
     image: freqtradeorg/freqtrade:stable
-    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8080:8080"
+    restart: always
     container_name: freqtrade
     volumes:
       - "./user_data:/freqtrade/user_data"
     command: >
       trade
-      --logfile /freqtrade/user_data/logs/freqtrade.log
-      --db-url sqlite:////freqtrade/user_data/tradesv3.sqlite
-      --config /freqtrade/user_data/config.json
-      --strategy CombinedBinHAndCluc
+      --logfile user_data/logs/freqtrade.log
+      --db-url sqlite:///user_data/tradesv3.sqlite
+      --config user_data/config.json
+      --strategy GaussianChannelStrategy
