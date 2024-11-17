@@ -35,7 +35,9 @@
         "key": "",
         "secret": "",
         "pair_whitelist": [
-            "BTC/EUR"
+            "BTC/EUR",
+            "ETH/EUR",
+            "SOL/EUR"
         ]
     },
     "pairlists": [

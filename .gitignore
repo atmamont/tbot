@@ -11,23 +11,11 @@ TEST*.xml
 .DS_Store
 Thumbs.db
 
-# Applications
-*.app
-*.exe
-*.war
-
-# Large media files
-*.mp4
-*.tiff
-*.avi
-*.flv
-*.mov
-*.wmv
-
-# Database files
-
 *.sqlite
 data
-ft_userdata/user_data/backtest_results
-*.sqlite-wal
+backtest_results/
+hyperopt_results/
 *.sqlite*
+*.pkl
+hyperopt_tickerdata.pkl
+plot/
