@@ -19,3 +19,5 @@ hyperopt_results/
 *.pkl
 hyperopt_tickerdata.pkl
 plot/
+ft_userdata/user_data/data/
+ft_userdata/user_data/hyperopt_results/
